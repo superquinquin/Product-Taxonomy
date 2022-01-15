@@ -34,6 +34,13 @@ class watcher:
     self.EAN_list = self.df[barcode_col_name].values.tolist()
 
 
+  def string_cleaner(self, adict):
+    for k,v in adict.items():
+      if type(v) == str and v.strip() =='':
+        adict[k] = None
+      elif type(v) == str:
+        adict[k] = v.strip().replace('non renseigné', 'None')
+    return adict
 
   def openfoodfacts_extractor(self, EAN):
 
@@ -94,6 +101,8 @@ class watcher:
     else:
       pass
 
+    product_off = self.string_cleaner(product_off)
+
     return product_off
   
 
@@ -151,6 +160,8 @@ class watcher:
       if re.findall(r'transformation?(.*)', elm.text.lower()):
         product_fw['transformation_place_fw'] = re.findall(r'transformation?(.*)', elm.text.lower())[0].split(':')[-1].strip()
     
+    product_fw = self.string_cleaner(product_fw)
+
     return product_fw
 
 
@@ -192,7 +203,6 @@ class watcher:
 
   def run(self):
     for EAN in self.EAN_list:
-      print(EAN)
       product_off = self.openfoodfacts_extractor(EAN)
       product_fw = self.food_watching_extractor(EAN)
       self.glob_data(product_off, product_fw)
