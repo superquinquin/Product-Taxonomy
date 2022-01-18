@@ -8,6 +8,7 @@ import re
 
 
 class watcher:
+  
   def __init__(self):
     self.EAN_list = None
     self.df = None
@@ -40,7 +41,11 @@ class watcher:
         adict[k] = None
       elif type(v) == str:
         adict[k] = v.strip().replace('non renseigné', 'None')
+      elif type(v) == list:
+        adict[k] = ', '.join(v)
     return adict
+
+
 
   def openfoodfacts_extractor(self, EAN):
 
@@ -189,10 +194,88 @@ class watcher:
   def solver(self):
     """try to solve original df data innacuraries and mistakes.
     Required to be used on top of:
-    get_EAN_from_df() 
-    and build_DataFrame(merge=True) """
-    pass
+    get_EAN_from_df()"""
+    df = self.watchers_df
 
+    df['nutri_score_fw'] = df['nutri_score_fw'].str.lower()
+    df['cat_off'] = df['cat_off'].str.lower()
+    df['cat_fw'] = df['cat_fw'].str.lower()
+    df['packaging_fw'] = df['packaging_fw'].str.lower().replace('none','None')
+    df['packaging_off'] = df['packaging_off'].str.lower()
+    df['origins_off'] = df['origins_off'].str.lower()
+    df['comp_origins_fw'] = df['comp_origins_fw'].str.lower().replace('none','None')
+    df['brand_off'] = df['brand_off'].str.lower()
+    df['brand_fw'] = df['brand_fw'].str.lower().replace('none','None')
+    df['quantity_off'] = df['quantity_off'].str.lower()
+    df['quantity_fw'] = df['quantity_fw'].str.lower().replace('none','None')
+
+
+    df = df.fillna('None')
+
+    # labels
+    df['labels'] = df.apply(lambda x:'%s, %s' % (x['labels_off'],x['labels_fw']),axis=1)
+
+    # merging nova
+    df['nova_score_fw'] = [int(x) if type(x)==float else x for x in df['nova_score_fw'].values.tolist()]
+    df['nova_score_off'] = [int(x) if type(x)==float else x for x in df['nova_score_off'].values.tolist()]
+    df['nova_score'] = df.apply(lambda x:'%s, %s' % (x['nova_score_off'],x['nova_score_fw']),axis=1)
+    df['nova_score'] = df['nova_score'].apply(lambda x: ', '.join(list(set([elm.strip() for elm in x.split(',')]))))
+    df['nova_score'] = df['nova_score'].apply(lambda x: min(x.split(', ')))
+
+    #merging nutriscore
+    df['nutri_score'] = df.apply(lambda x:'%s, %s' % (x['nutri_grade_off'],x['nutri_score_fw']),axis=1)
+    df['nutri_score'] = df['nutri_score'].apply(lambda x: ', '.join(list(set([elm.strip() for elm in x.split(',')]))))
+    df['nutri_score'] = df['nutri_score'].apply(lambda x: min(x.split(', ')))
+
+    # dtype nutri_score
+    df['nutri_score_off'] = [int(x) if type(x)==float else x for x in df['nutri_score_off'].values.tolist()]
+
+    # cat merging
+    df['cat_more'] = df.apply(lambda x:'%s, %s' % (x['cat_off'],x['cat_fw']),axis=1)
+    df['cat_more'] = df['cat_more'].apply(lambda x: x.replace('None','').replace('none','') if len(x.split(',')) > 1 else x)
+    df['cat_more'] = df['cat_more'].apply(lambda x: ', '.join(list(filter(None,[elm.strip() for elm in x.split(',')]))))
+
+    #packaging
+    df['packaging'] = df.apply(lambda x:'%s, %s' % (x['packaging_off'],x['packaging_fw']),axis=1)
+    df['packaging'] = df['packaging'].apply(lambda x: ', '.join(list(set([elm.strip() for elm in x.split(',')]))))
+    # df['packaging'] = df['packaging'].apply(lambda x: max(x.replace('None','').split(', ')) if len(x.split(', ')) > 1 else x)
+
+    #origins
+    df['origins'] = df.apply(lambda x:'%s, %s' % (x['origins_off'],x['comp_origins_fw']),axis=1)
+    df['origins'] = df['origins'].apply(lambda x: ', '.join(list(set([elm.strip() for elm in x.split(',')]))))
+    df['origins'] = df['origins'].apply(lambda x: max(x.replace('None','').split(', ')) if len(x.split(', ')) > 1 else x)
+
+    # brand
+    df['marque_verif'] = df.apply(lambda x:'%s, %s' % (x['brand_off'],x['brand_fw']),axis=1)
+    df['marque_verif'] = df['marque_verif'].apply(lambda x: ', '.join(list(set([elm.strip() for elm in x.split(',')]))))
+    # df['brand'] = df['brand'].apply(lambda x: max(x.replace('None','').split(', ')) if len(x.split(', ')) > 1 else x)
+
+    #quantity
+    df['poid_verif'] = df.apply(lambda x:'%s, %s' % (x['quantity_off'],x['quantity_fw']),axis=1)
+    df['poid_verif'] = df['poid_verif'].apply(lambda x: ', '.join(list(set([elm.strip() for elm in x.split(',')]))))
+    df['poid_verif'] = df['poid_verif'].apply(lambda x: max(x.replace('None','').split(', ')) if len(x.split(', ')) > 1 else x)
+
+    #name
+    df['nom_verif'] = df.apply(lambda x:'%s, %s' % (x['name_off'],x['name_fw']),axis=1)
+    df['nom_verif'] = df['nom_verif'].apply(lambda x: ', '.join(list(set([elm.strip() for elm in x.split(',')]))))
+    df['nom_verif'] = df['nom_verif'].apply(lambda x: max(x.replace('None','').split(', ')) if len(x.split(', ')) > 1 else x)
+
+
+    # rename and drop
+    df = df.rename(columns={'eco_score_off':'eco_score',
+                            'eco_grade_off':'eco_grade',
+                            'nutri_score':'nutri_grade',
+                            'nutri_score_off':'nutri_score',
+                            'keywords_off':'keywords',
+                            'transformation_place_fw':'transformation_place'})
+    
+
+    df = df.drop(['nova_score_fw','nova_score_off', 'name_fw', 'name_off',
+                  'quantity_off', 'quantity_fw', 'brand_off', 'brand_fw',
+                  'origins_off', 'comp_origins_fw', 'packaging_off', 'packaging_fw',
+                  'cat_off', 'cat_fw', 'labels_off', 'labels_fw', 'nutri_grade_off'], axis=1)
+
+    self.watchers_df = df
 
 
 
